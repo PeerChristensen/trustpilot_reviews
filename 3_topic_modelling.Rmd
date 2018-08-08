@@ -28,7 +28,7 @@ devtools::install_github("56north/happyorsad")
 library(happyorsad)
 ```
   
-## Customizing a ggplot theme
+## Customising a ggplot theme
 
 Improving the look of figures in ggplot2 is fairly simple. For consistency, we'll create a clean and simple theme based on the APA theme from the jtools package and change some of the features.  The background colour will be set to a light grey hue. The grid lines are omitted in the APA theme.
 
@@ -215,6 +215,7 @@ Positive Reviews:
 2. service  
 3. phone, again, store and new - *maybe 3 stores often replace malfunctioning cell phones?*  
 4. plan (service), kr (Danish currency), pay, bill - *something positive about plans and payment?*  
+
 Negative reviews:  
 
 1. customer service, plan  
