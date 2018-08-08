@@ -4,6 +4,8 @@
 Created on Tue Oct 24 13:57:41 2017
 
 @author: peerchristensen
+
+jan 2015 - oct 2017
 """
 import requests
 import os

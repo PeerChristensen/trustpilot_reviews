@@ -1,0 +1,233 @@
+---
+title: "3_review_topic_modelling"
+author: "Peer Christensen"
+date: "8/8/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, message =F, tidy=T)
+```  
+
+# Topic Modelling Trustpilot Reviews with R and tidytext
+
+In this tutorial and analysis, we'll apply topic modelling to Danish Trustpilot reviews of "3" ("three" in other countries), my current telecommunications provider. I'm dissatisfied with their customer service and thought this would be an interesting use case for topic modelling. With this approach, we can try to find out **which aspects of the customer experience come up in positive and negative reviews.**  
+
+I used a [Python script](https://github.com/PeerChristensen/trustpilot_reviews/blob/master/3reviews.py) to scrape 4000 customer reviews of "3" from trustpilot.dk between January 2015 and October 2017.  
+
+For more details on topic modelling with the tidytext package by Julia Silge and David Robinson, check out their [book](https://www.tidytextmining.com/tidytext.html).  
+
+## Required packages
+
+```{r}
+if(!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse,tidytext,tm,topicmodels,magrittr,jtools,gridExtra,knitr)
+
+if(!require("devtools")) install.packages("devtools")
+devtools::install_github("56north/happyorsad")
+library(happyorsad)
+```
+  
+## Customizing a ggplot theme
+
+Improving the look of figures in ggplot2 is fairly simple. For consistency, we'll create a clean and simple theme based on the APA theme from the jtools package and change some of the features.  The background colour will be set to a light grey hue. The grid lines are omitted in the APA theme.
+
+```{r}
+my_theme <- function() {
+  theme_apa(legend.pos = "none") +
+    theme(panel.background = element_rect(fill = "gray96", colour = "gray96")) +
+    theme(plot.background = element_rect(fill = "gray96", colour = "gray96")) +
+    theme(plot.margin = margin(1, 1, 1, 1, "cm")) +
+    theme(panel.border = element_blank()) +             # facet border
+    theme(strip.background = element_blank())           # facet title background
+}
+```  
+
+## Loading & preparing the data
+
+Our data frame has two columns: a variable called Name containing the name of the reviewer/author, which will function as a variable to identify each documen; a variable called Review containing individual reviews.
+
+```{r}
+df <- read_csv2("https://raw.githubusercontent.com/PeerChristensen/trustpilot_reviews/master/3reviewsB.csv")
+
+df %<>% 
+  select(-X1) %>%                                            # remove unnecessary column
+  filter(Name != "John M. Sebastian")                        # remove one very odd review
+```
+
+Given that our reviews are in Danish, we can use the happyorsad package to compute a sentiment score for each review. Scores are based on a Danish list of sentiment words and scores put together by Finn Årup Nielsen. We will also make sure that all words are in lowercase, and remove a bunch of pre-defined Danish stop words and frequent verbs.
+
+```{r}
+df %<>%
+  mutate(Sentiment = map_int(df$Review,happyorsad,"da")) %>%
+  mutate(Review = tolower(Review)) %>%              
+  mutate(Review = removeWords(Review, c("så", "3", "kan","få","får","fik", stopwords("danish"))))
+```
+
+## Distribution of sentiment scores
+
+In the density plot below, we see how sentiment scores are distributed with a median score of 2. As you can probably tell, we're dealing with a fairly mediocre provider. However, we still want to know *why* the company has a 6.7 rating out of 10.  
+
+In a very crude way, we'll put positive and negative reviews in separate data frames and perform topic modelling on each in order to explore what reviewers like and dislike about 3.
+
+```{r}
+df %>% 
+  ggplot(aes(x=Sentiment)) + 
+  geom_density(size=1) +
+  geom_vline(xintercept = median(df$Sentiment), 
+             colour = "indianred", linetype = "dashed", size =1) +
+  ggplot2::annotate("text", x = 15, y = 0.06, 
+                    label = paste("median = ", median(df$Sentiment)), colour = "indianred") +
+  my_theme() +
+  xlim(-40,40)
+```
+
+## Topic modelling for positive  reviews
+
+The data frame created below contains 2228 positive reviews with scores above 1. Words will be tokenized, i.e. one word per row. 
+
+```{r}
+df_pos <- df %>%
+  filter(Sentiment > 1) %>%
+  select(-Sentiment) %>%
+  unnest_tokens(word, Review)
+```
+
+Before creating a so-called *document term matrix*, we need to count the frequency of each word per document (review).
+
+```{r}
+words_pos <- df_pos %>%
+  count(Name, word, sort = TRUE) %>%
+  ungroup()
+
+reviewDTM_pos <- words_pos %>%
+  cast_dtm(Name, word, n)
+```
+
+Now that we have a "DTM", we can pass it to the LDA function, which implements the *Latent Dirichlet Allocation* algorithm. It assumes that every document is a mixture of topics, and every topic is a mixture of words. The k argument is used to specify the desired amount of topics that we want in our model. Let's create a four-topic model! 
+
+```{r}
+reviewLDA_pos <- LDA(reviewDTM_pos, k = 4, control = list(seed = 347))
+```
+
+The following figure shows how many reviews that are assigned to each topic.
+
+```{r}
+tibble(topics(reviewLDA_pos)) %>%
+  group_by(`topics(reviewLDA_pos)`) %>%
+  count() %>% 
+  kable()
+```
+
+We can also get the per-topic per-word probabilities, or "beta".
+
+```{r}
+topics_pos <- tidy(reviewLDA_pos, matrix = "beta")
+topics_pos
+```
+
+Now, we can find the top terms for each topic, i.e. the words with the highest probability/beta.
+Here, we choose the top five words, which we will show in a plot.
+
+```{r}
+topTerms_pos <- topics_pos %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta) %>%
+  mutate(order = rev(row_number())) # necessary for ordering words properly
+```
+
+## Topic modelling for negative  reviews
+
+Let's first do the same for negative reviews creating a data frame with  973 reviews with a sentiment score below -1.
+
+```{r}
+df_neg <- df %>%
+  filter(Sentiment < -1) %>%
+  select(-Sentiment) %>%
+  unnest_tokens(word, Review)
+
+words_neg <- df_neg %>%
+  count(Name, word, sort = TRUE) %>%
+  ungroup()
+
+reviewDTM_neg <- words_neg %>%
+  cast_dtm(Name, word, n)
+
+reviewLDA_neg <- LDA(reviewDTM_neg, k = 4, control = list(seed = 347))
+
+tibble(topics(reviewLDA_neg)) %>%
+  group_by(`topics(reviewLDA_neg)`) %>%
+  count() %>%
+  kable()
+
+topics_neg <- tidy(reviewLDA_neg, matrix = "beta")
+
+topTerms_neg <- topics_neg %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta) %>%
+  mutate(order = rev(row_number())) # necessary for ordering words
+```
+
+## Plotting the topic models
+
+Finally, let's plot the results...
+
+```{r fig.height=10,fig.width=10}
+plot_pos <- topTerms_pos %>%
+  ggplot(aes(order, beta)) +
+  ggtitle("Positive review topics") +
+  geom_col(show.legend = FALSE, fill = "steelblue") +
+  scale_x_continuous(
+    breaks = topTerms_pos$order,
+    labels = topTerms_pos$term,
+    expand = c(0,0))+
+  facet_wrap(~ topic,scales="free") +
+  coord_flip(ylim=c(0,0.02)) +
+  my_theme() +
+  theme(axis.title=element_blank())
+
+plot_neg <- topTerms_neg %>%
+  ggplot(aes(order, beta, fill = factor(topic))) +
+  ggtitle("Negative review topics") +
+  geom_col(show.legend = FALSE, fill = "indianred") +
+  scale_x_continuous(
+    breaks = topTerms_neg$order,
+    labels = topTerms_neg$term,
+    expand = c(0,0))+
+  facet_wrap(~ topic,scales="free") +
+  coord_flip(ylim=c(0,0.02)) +
+  my_theme() +
+  theme(axis.title=element_blank())
+
+grid.arrange(plot_pos, plot_neg, ncol = 1)
+```
+
+So, what do 3 customers writing reviews on Trustpilot.dk like and dislike? 
+Unfortunately, the reviews are in Danish, but here's what people tend to highlight, given four-topic models of positive and negative reviews:  
+
+Positive Reviews:  
+
+1. coverage and data  
+2. service  
+3. phone, again, store and new - *maybe 3 stores often replace malfunctioning cell phones?*  
+4. plan (service), kr (Danish currency), pay, bill - *something positive about plans and payment?*  
+Negative reviews:  
+
+1. customer service, plan  
+2. customer service, phone, error, plan  
+3. phone, coverage, store  
+4. pay, bill, kr, plan  
+
+Interestingly, customers seem to have both positive and negative experiences with respect to pretty much the same topics. Some customers appear to experience good coverage, whereas others seem to experience poor coverage. The same pattern appears for (customer) service and payment. 
+
+
+
+
+ 
+
+
+

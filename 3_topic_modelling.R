@@ -9,7 +9,7 @@ library(topicmodels)
 library(magrittr)
 library(happyorsad)
 library(jtools)
-library(patchwork)
+library(gridExtra)
 
 # SET THEME
 my_theme <- function() {
@@ -36,10 +36,16 @@ df %<>%
 #save data
 write_csv(df, "3_tm_data")
 
+################################################################
+
+df = read_csv("3_tm_data")
+
 #  Plot distribution with median
-ggplot(df, aes(x=Sentiment)) + 
+df %>% 
+  ggplot(aes(x=Sentiment)) + 
   geom_density(size=1) +
-  geom_vline(xintercept = median(Sentiment), colour = "indianred", linetype = "dashed", size =1) +
+  geom_vline(xintercept = median(df$Sentiment), colour = "indianred", linetype = "dashed", size =1) +
+  ggplot2::annotate("text", x = 15, y = 0.06, label = paste("median = ", median(df$Sentiment)), colour = "indianred") +
   my_theme() +
   xlim(-40,40)
 
@@ -67,9 +73,8 @@ tibble(topics(reviewLDA_pos)) %>%
   my_theme() +
   xlab("Topic")
 
-
 #per-topic per-word probabilities
-topics_pos <- tidy(reviewLDA_pos, matrix = "gamma")
+topics_pos <- tidy(reviewLDA_pos, matrix = "beta")
 
 #top terms per topic
 topTerms_pos <- topics_pos %>%
@@ -144,7 +149,9 @@ plot_neg <- topTerms_neg %>%
   my_theme() +
   theme(axis.title=element_blank())
 
-grid.arrange(plot_pos,plot_neg, ncol = 1)
+combined_plot = arrangeGrob(plot_pos,plot_neg, ncol = 1)
+combined_plot
+ggsave("combined_plot.png", combined_plot, height = 10, width = 12)
 
 # sentiment score, try with map()
 #sentiment = NULL
