@@ -21,7 +21,7 @@ For more details on topic modelling with the tidytext package by Julia Silge and
 
 ```{r}
 if(!require("pacman")) install.packages("pacman")
-pacman::p_load(tidyverse,tidytext,tm,topicmodels,magrittr,jtools,gridExtra,knitr)
+pacman::p_load(tidyverse,tidytext,tm,topicmodels,magrittr,jtools,gridExtra,knitr,widyr,ggraph,igraph)
 
 if(!require("devtools")) install.packages("devtools")
 devtools::install_github("56north/happyorsad")
@@ -223,12 +223,97 @@ Negative reviews:
 3. phone, coverage, store  
 4. pay, bill, kr, plan  
 
-Interestingly, customers seem to have both positive and negative experiences with respect to pretty much the same topics. Some customers appear to experience good coverage, whereas others seem to experience poor coverage. The same pattern appears for (customer) service and payment. 
+Interestingly, customers seem to have both positive and negative experiences with respect to pretty much the same topics. Some customers appear to experience good coverage, whereas others seem to complain about poor coverage. The same pattern appears for (customer) service and payment.  
 
+Let's explore this further!  
 
+# Word co-ocurrence within reviews
 
+To see whether word pairs like "good service" and "bad service" are frequent in our two data sets, we'll count how many times each pair of words occurs together in a title or description field. This is easy with pairwise_count() from the widyr package.
 
- 
+```{r}
+word_pairs_pos <- df_pos %>% 
+  pairwise_count(word, Name, sort = TRUE)
 
+word_pairs_neg <- df_neg %>%
+  pairwise_count(word, Name, sort = TRUE)
+```
+  
+We can then plot the most common word pairs co-occuring in the reviews by means of the igraph and ggraph packages.
 
+```{r}
+set.seed(611)
+
+pairs_plot_pos <- word_pairs_pos %>%
+  filter(n >= 140) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "steelblue") +
+  ggtitle("Positive word pairs") +
+  geom_node_point(size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE,
+                point.padding = unit(0.2, "lines")) +
+  my_theme() +
+  theme(axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank())
+
+pairs_plot_neg <- word_pairs_neg %>%
+  filter(n >= 80) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "indianred") +
+  ggtitle("Negative word pairs") +
+  geom_node_point(size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE,
+                 point.padding = unit(0.2, "lines")) +
+  my_theme() +
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+grid.arrange(pairs_plot_pos, pairs_plot_neg, ncol = 2)
+```
+
+## Word pair correlations
+
+A more direct approach to finding out what customers consider good and bad about 3 is to use the pairwise_cor() function and look specifically for the words that correlate the most with the words for "good" and "bad" in Danish.
+
+```{r}
+cor_pos <- df_pos %>% 
+  group_by(word) %>%
+  filter(n() >= 100) %>%
+  pairwise_cor(word, Name, sort = TRUE) %>% filter(item1 == "god") %>%
+  top_n(7)
+
+cor_neg <- df_neg %>% 
+  group_by(word) %>%
+  filter(n() >= 100) %>%
+  pairwise_cor(word, Name, sort = TRUE) %>% filter(item1 == "dårlig") %>%
+  top_n(7)
+```
+
+Let's combine the data in a single plot.
+
+```{r}
+cor_words <- rbind(cor_pos, cor_neg) %>%
+    mutate(order = rev(row_number()),
+           item1 = factor(item1, levels = c("god", "dårlig")))
+
+cor_words %>%
+  ggplot(aes(x=order, y=correlation, fill = item1)) +
+  geom_col(show.legend = FALSE) +
+  scale_x_continuous(
+    breaks = cor_words$order,
+    labels = cor_words$item2,
+    expand = c(0,0)) +
+  facet_wrap(~item1, scales = "free") +
+  scale_fill_manual(values=c("steelblue", "indianred")) + 
+  coord_flip() +
+  labs(x= "words") +
+  my_theme()
+  
+```
+
+This analysis confirms that some reviewers like the (customer) service and the coverage provided by 3, whereas others have a negative view of their service and coverage.
 
