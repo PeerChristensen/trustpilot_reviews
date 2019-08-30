@@ -8,6 +8,10 @@ library(furrr)
 library(scales)
 library(SnowballC)
 library(textstem)
+library(hrbrthemes)
+library(ggthemes)
+library(gridExtra)
+
 
 df <- read_csv("booking_com.csv")
 
@@ -21,7 +25,7 @@ df              <- df                      %>%
   dplyr::filter(!word %in% c("booking.com","book"),
                 !str_detect(word,"[0-9]"))
 
-n_topics = seq(4,12,2) # change to seq
+n_topics = seq(4,6,2) # change to seq
 
 # bad reviews
 
@@ -112,16 +116,22 @@ stm_plot1 <- gamma_terms1 %>%
   #top_n(3, gamma)      %>% # n topics
   ggplot(aes(topic, gamma, label = terms, fill = topic)) +
   geom_col(show.legend = FALSE,width=.7) +
-  geom_text(hjust = -.05, vjust=0, size = 8, family = "Helvetica") +
+  geom_text(hjust = -.05, vjust=0, size = 8, family = "Roboto Condensed") +
   coord_flip() +
   scale_y_continuous(expand = c(0,0),
                      limits = c(0, 0.6),
-                     labels = percent_format()) +
+                     labels = percent_format(accuracy = 1)) +
   labs(x = NULL, y = expression(gamma),
-       title = "STM: Top 10 
-       topics by prevalence in the SOU",
-       subtitle = "With the top words that contribute to each topic") +
-  scale_fill_viridis_d(begin=.3)
+       title = "1-star review topics") +
+  #scale_fill_viridis_d(begin=.3) +
+  theme_ipsum_rc() +
+  scale_fill_tableau() +
+  theme(plot.margin = margin(3,1.5, 3,1.5, "cm"),
+        plot.title = element_text(size=30),
+        axis.text.y = element_text(size = 24,
+                                   margin = margin(r = .3, unit = "cm")),
+        axis.text.x = element_text(size = 20),
+        panel.grid = element_blank())
 
 stm_plot1
 
@@ -214,15 +224,25 @@ stm_plot5 <- gamma_terms5 %>%
   #top_n(3, gamma)      %>% # n topics
   ggplot(aes(topic, gamma, label = terms, fill = topic)) +
   geom_col(show.legend = FALSE,width=.7) +
-  geom_text(hjust = -.05, vjust=0, size = 8, family = "Helvetica") +
+  geom_text(hjust = -.05, vjust=0, size = 8, family = "Roboto Condensed") +
   coord_flip() +
   scale_y_continuous(expand = c(0,0),
-                     limits = c(0, 0.6),
-                     labels = percent_format()) +
+                     limits = c(0, 0.62),
+                     labels = percent_format(accuracy = 1)) +
   labs(x = NULL, y = expression(gamma),
-       title = "STM: Top 10 
-       topics by prevalence in the SOU",
-       subtitle = "With the top words that contribute to each topic") +
-  scale_fill_viridis_d(begin=.3)
+       title = "5-star review topics") +
+  #scale_fill_viridis_d(begin=.3) +
+  theme_ipsum_rc() +
+  scale_fill_tableau() +
+  theme(plot.margin = margin(3,1.5, 3,1.5, "cm"),
+        plot.title = element_text(size=30),
+        axis.text.y = element_text(size = 24,
+                                   margin = margin(r = .3, unit = "cm")),
+        axis.text.x = element_text(size = 20),
+        panel.grid = element_blank())
 
 stm_plot5
+
+g=arrangeGrob(stm_plot5,stm_plot1,ncol=2)
+ggsave("booking_com_tm.png",g,width = 24,height=10)
+ggsave("booking_com_tm2.png",g,width = 24,height=12) # best
