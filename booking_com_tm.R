@@ -25,7 +25,8 @@ df              <- df                      %>%
   dplyr::filter(!word %in% c("booking.com","book"),
                 !str_detect(word,"[0-9]"))
 
-n_topics = seq(4,6,2) # change to seq
+# find best number of topics
+n_topics = seq(4,6,2)
 
 # bad reviews
 
